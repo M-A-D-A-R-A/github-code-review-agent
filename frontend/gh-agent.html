@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PR Review Agent – Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #121923;
+      --muted: #8aa0b4;
+      --text: #e8f0f7;
+      --ok: #3ecf8e;
+      --warn: #ffcc66;
+      --err: #ff7a90;
+      --info: #6aa7ff;
+      --accent: #7a8cff;
+      --border: #223043;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #0b0f14 0%, #0b1119 100%);
+      color: var(--text);
+      font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+    }
+    header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(18,25,35,0.7);
+      backdrop-filter: blur(6px);
+      position: sticky; top: 0; z-index: 10;
+    }
+    header h1 {
+      margin: 0; font-size: 18px; font-weight: 600;
+    }
+    .container { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    }
+
+    /* Form */
+    form {
+      display: grid;
+      grid-template-columns: 1fr 140px 1fr 120px;
+      gap: 12px;
+      align-items: end;
+    }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    input[type="text"], input[type="number"], input[type="password"] {
+      width: 100%; padding: 10px 12px; border-radius: 10px;
+      border: 1px solid var(--border); background: #0f1520; color: var(--text);
+      outline: none;
+    }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(122,140,255,0.2); }
+    .error { border-color: var(--err) !important; }
+    .hint { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin-top: -6px; }
+
+    button {
+      padding: 11px 14px; border-radius: 10px; border: 1px solid var(--border);
+      background: linear-gradient(180deg, #1a2440 0%, #141d34 100%);
+      color: var(--text); cursor: pointer; font-weight: 600;
+    }
+    button:hover { border-color: var(--accent); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* Task list */
+    .tasks {
+      margin-top: 18px;
+      display: grid; gap: 10px;
+    }
+    .task {
+      border: 1px solid var(--border); border-radius: 12px;
+      background: #0f1520;
+      padding: 12px;
+    }
+    .task-head {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: center; gap: 10px; cursor: default;
+    }
+    .meta { color: var(--muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .status {
+      font-size: 12px; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--border);
+      text-transform: uppercase; letter-spacing: .06em; background: #0c1320;
+    }
+    .status.pending { color: var(--warn); border-color: #3a2f0f; background: #181203; }
+    .status.processing { color: var(--info); border-color: #1a2e57; background: #0c1320; }
+    .status.completed { color: var(--ok); border-color: #214d3a; background: #0b1a14; }
+    .status.failed { color: var(--err); border-color: #4d2130; background: #1a0b10; }
+
+    .row-actions { display: flex; gap: 8px; }
+    .small-btn {
+      font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border);
+      background: #151d2c; color: var(--text);
+    }
+    .small-btn:hover { border-color: var(--accent); }
+
+    .task-body { margin-top: 12px; display: none; }
+    .task-body.open { display: block; }
+
+    .summary {
+      display: flex; gap: 18px; flex-wrap: wrap;
+      background: #0c1320; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
+    }
+    .summary span { color: var(--muted); font-size: 12px; }
+    .summary strong { color: var(--text); margin-left: 6px; }
+
+    .files { margin-top: 12px; }
+    .file {
+      border: 1px dashed var(--border); border-radius: 10px; padding: 10px; margin-top: 10px;
+      background: #0b111b;
+    }
+    .issues { margin-top: 8px; display: grid; gap: 8px; }
+    .issue {
+      background: #0f1725; border: 1px solid #1b2941; border-left-width: 4px;
+      border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px;
+    }
+    .issue.style { border-left-color: #8aa0b4; }
+    .issue.bug { border-left-color: var(--err); }
+    .issue.performance { border-left-color: #f29f67; }
+    .issue.best_practice { border-left-color: #9dd67a; }
+    .issue.security { border-left-color: #ff5a6e; }
+
+    .toast {
+      position: fixed; right: 16px; bottom: 16px;
+      background: #0f1725; color: var(--text);
+      border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.3);
+    }
+    code { background: #0c1320; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); }
+    a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PR Review Agent</h1>
+    <span class="meta">FastAPI · Celery · Redis · Postgres · Agno + Ollama</span>
+  </header>
+
+  <div class="container">
+    <div class="card" style="margin-bottom:16px;">
+      <form id="analyzeForm" novalidate>
+        <div>
+          <label for="repoUrl">GitHub Repo URL</label>
+          <input id="repoUrl" type="text" placeholder="https://github.com/owner/repo" required />
+        </div>
+        <div>
+          <label for="prNumber">PR Number</label>
+          <input id="prNumber" type="number" min="1" placeholder="123" required />
+        </div>
+        <div>
+          <label for="ghToken">GitHub Token (optional)</label>
+          <input id="ghToken" type="password" placeholder="ghp_xxx (only if private repo)" />
+        </div>
+        <div>
+          <button id="submitBtn" type="submit">Analyze PR</button>
+        </div>
+        <div class="hint">Make sure your backend is running at <code id="apiBaseHint"></code>. You can change it below.</div>
+        <div style="grid-column:1/-1; display:flex; gap:8px; align-items:center; margin-top:6px;">
+          <label for="apiBase" style="margin:0;">API Base</label>
+          <input id="apiBase" type="text" style="max-width:360px;" />
+          <button id="saveBase" type="button" class="small-btn">Save</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <h2 style="margin:0; font-size:16px;">Tasks</h2>
+        <div class="meta" id="pollingMeta">Polling every 5s…</div>
+      </div>
+      <div id="tasks" class="tasks"></div>
+      <div id="noTasks" class="meta">No tasks yet. Submit a PR above.</div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" style="display:none;"></div>
+
+  <script>
+    "use strict";
+
+    // ======== CONFIG ========
+    const DEFAULT_API_BASE = "http://localhost:8000";
+    const POLL_INTERVAL_MS = 5000;
+
+    // ======== STATE ========
+    const tasks = new Map(); // taskId -> { task_id, status, error?, results? }
+    let pollTimer = null;
+
+    // ======== DOM ========
+    const form = document.getElementById("analyzeForm");
+    const repoUrlEl = document.getElementById("repoUrl");
+    const prNumberEl = document.getElementById("prNumber");
+    const ghTokenEl = document.getElementById("ghToken");
+    const submitBtn = document.getElementById("submitBtn");
+    const tasksEl = document.getElementById("tasks");
+    const noTasksEl = document.getElementById("noTasks");
+    const toastEl = document.getElementById("toast");
+    const apiBaseEl = document.getElementById("apiBase");
+    const apiBaseHintEl = document.getElementById("apiBaseHint");
+    const saveBaseBtn = document.getElementById("saveBase");
+
+    // ======== UTIL ========
+    function getApiBase() {
+      return localStorage.getItem("apiBase") || DEFAULT_API_BASE;
+    }
+    function setApiBase(v) {
+      localStorage.setItem("apiBase", v);
+      apiBaseEl.value = v;
+      apiBaseHintEl.textContent = v;
+    }
+    setApiBase(getApiBase());
+
+    function showToast(msg, ms = 3500) {
+      toastEl.textContent = msg;
+      toastEl.style.display = "block";
+      setTimeout(() => (toastEl.style.display = "none"), ms);
+    }
+
+    function validateRepoUrl(url) {
+      // Accept: https://github.com/owner/repo (optionally .git)
+      const re = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/;
+      return re.test(url.trim());
+    }
+
+    function renderTasks() {
+      tasksEl.innerHTML = "";
+      const arr = Array.from(tasks.values()).sort((a, b) => (a.created_at || 0) < (b.created_at || 0) ? 1 : -1);
+      if (arr.length === 0) {
+        noTasksEl.style.display = "block";
+        return;
+      }
+      noTasksEl.style.display = "none";
+
+      for (const t of arr) {
+        const wrap = document.createElement("div");
+        wrap.className = "task";
+        wrap.dataset.taskId = t.task_id;
+
+        const head = document.createElement("div");
+        head.className = "task-head";
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.innerHTML = `
+          <span><strong>Task:</strong> <code>${t.task_id}</code></span>
+          <span><strong>Repo:</strong> ${t.repo_url ? `<code>${t.repo_url}</code>` : "-"}</span>
+          <span><strong>PR:</strong> ${t.pr_number ?? "-"}</span>
+        `;
+
+        const status = document.createElement("div");
+        status.className = `status ${t.status}`;
+        status.textContent = t.status;
+
+        const actions = document.createElement("div");
+        actions.className = "row-actions";
+
+        const refreshBtn = document.createElement("button");
+        refreshBtn.className = "small-btn";
+        refreshBtn.textContent = "Check status";
+        refreshBtn.onclick = () => checkStatus(t.task_id, true);
+
+        const toggleBtn = document.createElement("button");
+        toggleBtn.className = "small-btn";
+        toggleBtn.textContent = t._open ? "Hide" : "Expand";
+        toggleBtn.disabled = t.status !== "completed";
+        toggleBtn.onclick = () => {
+          t._open = !t._open;
+          if (t._open && !t.results && t.status === "completed") {
+            fetchResults(t.task_id);
+          }
+          renderTasks();
+        };
+
+        actions.appendChild(refreshBtn);
+        actions.appendChild(toggleBtn);
+
+        head.appendChild(meta);
+        head.appendChild(status);
+        head.appendChild(actions);
+
+        const body = document.createElement("div");
+        body.className = "task-body" + (t._open ? " open" : "");
+        if (t.error) {
+          const err = document.createElement("div");
+          err.className = "meta";
+          err.style.color = "var(--err)";
+          err.textContent = `Error: ${t.error}`;
+          body.appendChild(err);
+        }
+
+        if (t._open && t.status === "completed") {
+          if (!t.results) {
+            const loading = document.createElement("div");
+            loading.className = "meta";
+            loading.textContent = "Loading results…";
+            body.appendChild(loading);
+          } else {
+            // Render summary
+            const sum = t.results.summary || {};
+            const summary = document.createElement("div");
+            summary.className = "summary";
+            summary.innerHTML = `
+              <span>Total files:<strong>${sum.total_files ?? 0}</strong></span>
+              <span>Total issues:<strong>${sum.total_issues ?? 0}</strong></span>
+              <span>Critical issues:<strong>${sum.critical_issues ?? 0}</strong></span>
+            `;
+            body.appendChild(summary);
+
+            // Render files/issues
+            const filesWrap = document.createElement("div");
+            filesWrap.className = "files";
+            const files = Array.isArray(t.results.files) ? t.results.files : [];
+            for (const f of files) {
+              const fileDiv = document.createElement("div");
+              fileDiv.className = "file";
+              const issues = Array.isArray(f.issues) ? f.issues : [];
+              fileDiv.innerHTML = `<div class="meta"><strong>File:</strong> <code>${f.name || "(unknown)"}</code> · Issues: ${issues.length}</div>`;
+              const issuesWrap = document.createElement("div");
+              issuesWrap.className = "issues";
+
+              for (const issue of issues) {
+                const it = document.createElement("div");
+                it.className = `issue ${issue.type || "style"}`;
+                const line = issue.line == null ? "" : ` · line ${issue.line}`;
+                const suggestion = issue.suggestion ? `<div class="meta"><strong>Suggestion:</strong> ${escapeHTML(issue.suggestion)}</div>` : "";
+                it.innerHTML = `
+                  <div><strong>${(issue.type || "style").replace("_", " ")}</strong>${line} · <span class="meta">severity: ${issue.severity || "medium"}</span></div>
+                  <div>${escapeHTML(issue.description || "")}</div>
+                  ${suggestion}
+                `;
+                issuesWrap.appendChild(it);
+              }
+
+              fileDiv.appendChild(issuesWrap);
+              filesWrap.appendChild(fileDiv);
+            }
+            body.appendChild(filesWrap);
+          }
+        }
+
+        wrap.appendChild(head);
+        wrap.appendChild(body);
+        tasksEl.appendChild(wrap);
+      }
+    }
+
+    function escapeHTML(s) {
+      return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    // ======== API calls ========
+    async function analyzePR(repo_url, pr_number, github_token) {
+      const base = getApiBase();
+      const res = await fetch(`${base}/analyze-pr`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_url, pr_number, github_token: github_token || null }),
+      });
+      if (!res.ok) throw new Error(`Analyze failed: ${res.status} ${res.statusText}`);
+      return res.json();
+    }
+
+    async function getStatus(taskId) {
+      const base = getApiBase();
+      const res = await fetch(`${base}/status/${encodeURIComponent(taskId)}`);
+      if (!res.ok) throw new Error(`Status failed: ${res.status} ${res.statusText}`);
+      return res.json();
+    }
+
+    async function getResults(taskId) {
+      const base = getApiBase();
+      const res = await fetch(`${base}/results/${encodeURIComponent(taskId)}`);
+      if (!res.ok) throw new Error(`Results failed: ${res.status} ${res.statusText}`);
+      return res.json();
+    }
+
+    // ======== Actions ========
+    async function checkStatus(taskId, manual = false) {
+      try {
+        const data = await getStatus(taskId);
+        const t = tasks.get(taskId) || { task_id: taskId };
+        t.status = data.status;
+        t.error = data.error || null;
+        tasks.set(taskId, t);
+        if (manual) showToast(`Status: ${data.status}`);
+        // If becomes completed, fetch results preview on expand
+        renderTasks();
+      } catch (e) {
+        showToast(`Status error: ${e.message}`);
+      }
+    }
+
+    async function fetchResults(taskId) {
+      try {
+        const data = await getResults(taskId);
+        const t = tasks.get(taskId);
+        if (!t) return;
+        if (data.status === "completed" && data.results) {
+          t.results = data.results;
+          tasks.set(taskId, t);
+          renderTasks();
+        } else {
+          showToast(`Results not ready (status: ${data.status})`);
+        }
+      } catch (e) {
+        showToast(`Results error: ${e.message}`);
+      }
+    }
+
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(() => {
+        const pending = [...tasks.values()].filter(t => t.status === "pending" || t.status === "processing");
+        pending.forEach(t => checkStatus(t.task_id));
+      }, POLL_INTERVAL_MS);
+    }
+
+    // ======== Events ========
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const repoUrl = repoUrlEl.value.trim();
+      const prNumber = parseInt(prNumberEl.value, 10);
+      const token = ghTokenEl.value.trim();
+
+      // Validation
+      let valid = true;
+      repoUrlEl.classList.remove("error");
+      prNumberEl.classList.remove("error");
+
+      if (!validateRepoUrl(repoUrl)) { valid = false; repoUrlEl.classList.add("error"); }
+      if (!(Number.isInteger(prNumber) && prNumber > 0)) { valid = false; prNumberEl.classList.add("error"); }
+
+      if (!valid) {
+        showToast("Please fix the highlighted fields.");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      try {
+        const data = await analyzePR(repoUrl, prNumber, token || null);
+        const task = {
+          task_id: data.task_id,
+          status: data.status,
+          repo_url: repoUrl,
+          pr_number: prNumber,
+          created_at: Date.now(),
+        };
+        tasks.set(task.task_id, task);
+        renderTasks();
+        startPolling();
+        showToast("Task enqueued.");
+      } catch (e) {
+        showToast(e.message || "Failed to enqueue task.");
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    saveBaseBtn.addEventListener("click", () => {
+      const v = apiBaseEl.value.trim().replace(/\/+$/, "");
+      if (!v) return;
+      setApiBase(v);
+      showToast(`API base set to ${v}`);
+    });
+
+    // Init form base
+    apiBaseEl.value = getApiBase();
+    apiBaseHintEl.textContent = getApiBase();
+    renderTasks();
+    startPolling();
+  </script>
+</body>
+</html>
