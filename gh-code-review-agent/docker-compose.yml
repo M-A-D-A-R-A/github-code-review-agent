@@ -1,0 +1,90 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+    command: uv run fastapi dev 
+
+  worker:
+    build: .
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+    command: celery -A app.celery_app.celery worker --loglevel=INFO
+
+  postgres:
+    image: agnohq/pgvector:16
+    environment:
+      POSTGRES_DB: ai
+      POSTGRES_USER: ai
+      POSTGRES_PASSWORD: ai
+    ports:
+      - "5532:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # Ollama server (local LLM runtime)
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama     # persist models between restarts
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:11434/api/tags >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  # One-shot job to pull the model before api/worker start
+  ollama-pull:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      ollama:
+        condition: service_healthy
+    # Talk to the Ollama service over its internal DNS name
+    command: >
+      sh -c "
+        echo 'Requesting model pull: llama3.2:latest' &&
+        curl -sS -X POST http://ollama:11434/api/pull
+          -H 'Content-Type: application/json'
+          -d '{\"name\":\"llama3.2:latest\"}' &&
+        echo '\nModel pull requested. Waiting for it to appear...' &&
+        # wait until model shows up in /api/tags
+        for i in `seq 1 300`; do
+          curl -fsS http://ollama:11434/api/tags | grep -q 'llama3.2:latest' && exit 0
+          sleep 2
+        done
+        exit 1
+      "
+    restart: "no"
+
+volumes:
+  pgdata:
+  ollama:
